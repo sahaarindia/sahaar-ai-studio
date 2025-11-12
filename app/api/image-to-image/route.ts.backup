@@ -1,0 +1,159 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { writeFile, mkdir } from 'fs/promises';
+import path from 'path';
+import { existsSync } from 'fs';
+
+export async function POST(request: NextRequest) {
+  try {
+    console.log('🎨 Image-to-Image API called');
+
+    // Parse FormData (NOT JSON!)
+    const formData = await request.formData();
+    
+    const mainImage = formData.get('mainImage') as File;
+    const prompt = formData.get('prompt') as string;
+    const strength = parseInt(formData.get('strength') as string) || 35;
+    const style = formData.get('style') as string || 'auto';
+    const tier = formData.get('tier') as string || 'free';
+
+    // Validation
+    if (!mainImage) {
+      return NextResponse.json(
+        { error: 'Main image is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!prompt || prompt.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Prompt is required' },
+        { status: 400 }
+      );
+    }
+
+    console.log('✅ Validation passed:', { prompt, strength, style, tier });
+
+    // Upload main image
+    const mainImageUrl = await uploadImage(mainImage, 'main');
+    console.log('📤 Main image uploaded:', mainImageUrl);
+
+    // Upload reference images
+    const referenceImageUrls: string[] = [];
+    const maxRefs = tier === 'premium' ? 3 : 1;
+    
+    for (let i = 0; i < maxRefs; i++) {
+      const refImage = formData.get(`referenceImage${i}`) as File;
+      if (refImage) {
+        const refUrl = await uploadImage(refImage, `ref${i}`);
+        referenceImageUrls.push(refUrl);
+        console.log(`📤 Reference image ${i} uploaded:`, refUrl);
+      }
+    }
+
+    // Try Cloudflare first (better for img2img)
+    console.log('🔄 Trying Cloudflare API...');
+    try {
+      const cloudflareResult = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/img2img/cloudflare`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt,
+          mainImageUrl,
+          strength: strength / 100,
+          num_steps: 20,          // ✅ FIXED: Cloudflare max is 20, not 25
+          guidance: 7.5,
+        }),
+      });
+
+      if (cloudflareResult.ok) {
+        const data = await cloudflareResult.json();
+        console.log('✅ Cloudflare success');
+        return NextResponse.json({ 
+          imageUrl: data.imageUrl,
+          provider: 'cloudflare' 
+        });
+      }
+      
+      const errorText = await cloudflareResult.text();
+      console.log('⚠️ Cloudflare failed:', cloudflareResult.status, errorText.substring(0, 200));
+    } catch (error: any) {
+      console.error('❌ Cloudflare error:', error.message);
+    }
+
+    // Fallback to Pollinations
+    console.log('🔄 Trying Pollinations API...');
+    try {
+      const pollinationsResult = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/img2img/pollinations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt,
+          mainImageUrl,
+          referenceImageUrls,
+          strength: strength / 100,
+          style,
+        }),
+      });
+
+      if (pollinationsResult.ok) {
+        const data = await pollinationsResult.json();
+        console.log('✅ Pollinations success');
+        return NextResponse.json({ 
+          imageUrl: data.imageUrl,
+          provider: 'pollinations' 
+        });
+      }
+      
+      const errorText = await pollinationsResult.text();
+      console.log('⚠️ Pollinations failed:', pollinationsResult.status, errorText.substring(0, 200));
+    } catch (error: any) {
+      console.error('❌ Pollinations error:', error.message);
+    }
+
+    // Both failed
+    return NextResponse.json(
+      { error: 'All image generation providers failed. Please try again.' },
+      { status: 500 }
+    );
+
+  } catch (error: any) {
+    console.error('❌ API Error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+// Upload helper function
+async function uploadImage(file: File, prefix: string): Promise<string> {
+  try {
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+
+    // Create uploads directory if it doesn't exist
+    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+    if (!existsSync(uploadsDir)) {
+      await mkdir(uploadsDir, { recursive: true });
+    }
+
+    // Generate unique filename
+    const timestamp = Date.now();
+    const filename = `${prefix}-${timestamp}-${file.name}`;
+    const filepath = path.join(uploadsDir, filename);
+
+    // Save file
+    await writeFile(filepath, buffer);
+
+    // Return public URL
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://193.203.162.129:3000';
+    return `${baseUrl}/uploads/${filename}`;
+  } catch (error) {
+    console.error('Upload error:', error);
+    throw new Error('Failed to upload image');
+  }
+}

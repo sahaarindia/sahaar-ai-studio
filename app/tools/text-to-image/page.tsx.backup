@@ -1,0 +1,406 @@
+"use client";
+
+import { useState } from "react";
+import { ToolLayout } from "@/components/tool/ToolLayout";
+import { ToolInput } from "@/components/tool/ToolInput";
+import { ToolOutput } from "@/components/tool/ToolOutput";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { Sparkles, Download, Wand2, Image as ImageIcon } from "lucide-react";
+
+interface GeneratedImage {
+  url: string;
+  prompt: string;
+  model: string;
+  timestamp: number;
+}
+
+export default function TextToImagePage() {
+  const { language } = useLanguage();
+  const [prompt, setPrompt] = useState("");
+  const [model, setModel] = useState<"stable-diffusion" | "dall-e-3">("stable-diffusion");
+  const [distance, setDistance] = useState<number>(2.5);
+  const [consistent, setConsistent] = useState<boolean>(true);
+  const [size, setSize] = useState<"512x512" | "768x768" | "1024x1024">("1024x1024");
+  const [quality, setQuality] = useState<"standard" | "hd">("standard");
+  const [style, setStyle] = useState<"natural" | "vivid">("vivid");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
+  const [error, setError] = useState<string>("");
+
+  const handleGenerate = async () => {
+    if (!prompt.trim()) {
+      setError(language === "hi" ? "कृपया एक प्रॉम्प्ट दर्ज करें" : "Please enter a prompt");
+      return;
+    }
+
+    setIsGenerating(true);
+    setError("");
+    setGeneratedImage(null);
+
+    try {
+      const response = await fetch("/api/text-to-image", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+body: JSON.stringify({
+          prompt: prompt.trim(),
+          model,
+          size,
+          quality,
+          style,
+          distance,
+          consistent,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to generate image");
+      }
+
+      setGeneratedImage({
+        url: data.imageUrl,
+        prompt: prompt.trim(),
+        model,
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!generatedImage) return;
+
+    try {
+      const response = await fetch(generatedImage.url);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `sahaar-ai-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      setError(language === "hi" ? "डाउनलोड विफल रहा" : "Failed to download image");
+    }
+  };
+
+  const examplePrompts = [
+    "A serene landscape with mountains and sunset",
+    "A futuristic cityscape at night with neon lights",
+    "A cute robot in a garden with flowers",
+    "An ancient temple in a misty jungle",
+    "A cozy coffee shop interior with warm lighting",
+  ];
+
+  const t = {
+    toolName: language === "hi" ? "टेक्स्ट से चित्र जनरेटर" : "Text-to-Image Generator",
+    toolDescription: language === "hi" ? "टेक्स्ट विवरण से शानदार एआई-जनित चित्र बनाएं" : "Create stunning AI-generated images from text descriptions",
+    category: language === "hi" ? "इमेज टूल" : "Image Tool",
+    promptLabel: language === "hi" ? "अपनी छवि का वर्णन करें" : "Describe your image",
+    promptPlaceholder: language === "hi" ? "उदाहरण: सूर्यास्त के समय पहाड़..." : "e.g., A mountain at sunset...",
+    promptHelper: language === "hi" ? "सर्वोत्तम परिणामों के लिए विस्तृत रहें" : "Be descriptive for best results",
+    examplePrompts: language === "hi" ? "उदाहरण संकेत" : "Example Prompts",
+    modelLabel: language === "hi" ? "एआई मॉडल" : "AI Model",
+    sizeLabel: language === "hi" ? "चित्र आकार" : "Image Size",
+    qualityLabel: language === "hi" ? "गुणवत्ता" : "Quality",
+    styleLabel: language === "hi" ? "शैली" : "Style",
+    generateBtn: language === "hi" ? "चित्र उत्पन्न करें" : "Generate Image",
+    generating: language === "hi" ? "जनरेट हो रहा है..." : "Generating...",
+    downloadBtn: language === "hi" ? "डाउनलोड" : "Download",
+    newImageBtn: language === "hi" ? "नया चित्र" : "New Image",
+    imageWillAppear: language === "hi" ? "आपकी छवि यहां दिखाई देगी" : "Your image will appear here",
+    tipsTitle: language === "hi" ? "बेहतर परिणामों के लिए सुझाव" : "Tips for Better Results",
+    inputTitle: language === "hi" ? "चित्र संकेत" : "Image Prompt",
+    outputTitle: language === "hi" ? "जनरेट की गई छवि" : "Generated Image",
+  };
+
+  return (
+    <ToolLayout
+      toolName={t.toolName}
+      toolDescription={t.toolDescription}
+      toolIcon={<Sparkles className="w-8 h-8 text-white" />}
+      category={t.category}
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ToolInput title={t.inputTitle}>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-300">
+                <span className="flex items-center gap-2">
+                  <Wand2 className="w-4 h-4" />
+                  {t.promptLabel}
+                </span>
+              </label>
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder={t.promptPlaceholder}
+                className="w-full h-32 px-4 py-3 border border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-gray-800 text-white resize-none"
+                disabled={isGenerating}
+              />
+              <p className="mt-2 text-xs text-gray-400">
+                {t.promptHelper}
+              </p>
+
+            </div>
+<div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={consistent}
+                  onChange={(e) => setConsistent(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500 focus:ring-2 cursor-pointer"
+                  disabled={isGenerating}
+                />
+                <span>
+                  {language === "hi" ? "🎯 एक जैसी छवि (Consistent)" : "🎯 Consistent Results"}
+                </span>
+              </label>
+              <p className="text-xs text-gray-400 mt-1">
+                {consistent 
+                  ? (language === "hi" 
+                      ? "✅ एक ही prompt से हमेशा एक जैसी image बनेगी" 
+                      : "✅ Same prompt will always generate the same image")
+                  : (language === "hi" 
+                      ? "🎲 हर बार अलग variations बनेंगे (3-4 try करके best चुनें)" 
+                      : "🎲 Each generation will create different variations (try 3-4 times)")
+                }
+              </p>
+            </div>
+<div>
+              <label className="block text-sm font-medium mb-2 text-gray-300">
+                📸 {language === "hi" ? "कैमरा दूरी" : "Camera Distance"}
+              </label>
+              <div className="space-y-2">
+                <input
+                  type="range"
+                  min="0.5"
+                  max="10"
+                  step="0.5"
+                  value={distance}
+                  onChange={(e) => setDistance(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                  disabled={isGenerating}
+                />
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>0.5m</span>
+                  <span className="text-white font-semibold">{distance}m</span>
+                  <span>10m</span>
+                </div>
+                <p className="text-xs text-gray-400">
+                  {distance <= 1 && (language === "hi" ? "📸 क्लोज-अप: विस्तृत दृश्य" : "📸 Close-up: Detailed view")}
+                  {distance > 1 && distance <= 3 && (language === "hi" ? "📸 मीडियम: संतुलित फ्रेमिंग" : "📸 Medium: Balanced framing")}
+                  {distance > 3 && distance <= 5 && (language === "hi" ? "📸 वाइड: पूर्ण दृश्य" : "📸 Wide: Full scene")}
+                  {distance > 5 && (language === "hi" ? "📸 बहुत वाइड: विस्तृत दृश्य" : "📸 Very wide: Expansive view")}
+                </p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-300">
+                {t.examplePrompts}
+              </label>
+              <div className="space-y-2">
+                {examplePrompts.map((example, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setPrompt(example)}
+                    className="w-full text-left px-3 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-md transition-colors text-gray-300"
+                    disabled={isGenerating}
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-300">
+                {t.modelLabel}
+              </label>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value as any)}
+                className="w-full px-4 py-2 border border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-gray-800 text-white"
+                disabled={isGenerating}
+              >
+                <option value="stable-diffusion">Stable Diffusion (Free)</option>
+                <option value="dall-e-3">DALL-E 3 (Premium)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-300">
+                {t.sizeLabel}
+              </label>
+              <select
+                value={size}
+                onChange={(e) => setSize(e.target.value as any)}
+                className="w-full px-4 py-2 border border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-gray-800 text-white"
+                disabled={isGenerating}
+              >
+<select
+              value={size}
+              onChange={(e) => setSize(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-gray-800 text-white"
+              disabled={isGenerating}
+            >
+              <optgroup label="Square (1:1)">
+                <option value="512x512">512×512 (Small)</option>
+                <option value="768x768">768×768 (Medium)</option>
+                <option value="1024x1024">1024×1024 (Large)</option>
+              </optgroup>
+              <optgroup label="Landscape (16:9)">
+                <option value="1344x768">1344×768 (HD Landscape)</option>
+                <option value="1920x1080">1920×1080 (Full HD)</option>
+              </optgroup>
+              <optgroup label="Portrait (9:16)">
+                <option value="768x1344">768×1344 (HD Portrait)</option>
+                <option value="1080x1920">1080×1920 (Full HD)</option>
+              </optgroup>
+            </select>
+             </select>
+            </div>
+
+            {model === "dall-e-3" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-300">
+                    {t.qualityLabel}
+                  </label>
+                  <select
+                    value={quality}
+                    onChange={(e) => setQuality(e.target.value as any)}
+                    className="w-full px-4 py-2 border border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-gray-800 text-white"
+                    disabled={isGenerating}
+                  >
+                    <option value="standard">Standard</option>
+                    <option value="hd">HD</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-300">
+                    {t.styleLabel}
+                  </label>
+                  <select
+                    value={style}
+                    onChange={(e) => setStyle(e.target.value as any)}
+                    className="w-full px-4 py-2 border border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-gray-800 text-white"
+                    disabled={isGenerating}
+                  >
+                    <option value="vivid">Vivid</option>
+                    <option value="natural">Natural</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating || !prompt.trim()}
+              className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+            >
+              {isGenerating ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  {t.generating}
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5" />
+                  {t.generateBtn}
+                </>
+              )}
+            </button>
+
+            {model === "dall-e-3" && (
+              <div className="p-3 bg-yellow-900/20 border border-yellow-800 rounded-lg">
+                <p className="text-xs text-yellow-200">
+                  💰 DALL-E 3: ~$0.04 (Standard) or ~$0.08 (HD) per image
+                </p>
+              </div>
+            )}
+          </div>
+        </ToolInput>
+
+        <ToolOutput title={t.outputTitle}>
+          <div className="space-y-4">
+            {error && (
+              <div className="p-4 bg-red-900/20 border border-red-800 rounded-lg">
+                <p className="text-sm text-red-400">{error}</p>
+              </div>
+            )}
+
+            {generatedImage ? (
+              <div className="space-y-4">
+                <div className="relative rounded-lg overflow-hidden border-2 border-gray-700 bg-gray-800">
+                  <img
+                    src={generatedImage.url}
+                    alt={generatedImage.prompt}
+                    className="w-full h-auto"
+                  />
+                </div>
+
+                <div className="p-4 bg-gray-800 rounded-lg space-y-2">
+                  <div className="flex items-start gap-2">
+                    <span className="text-xs font-medium text-gray-400 uppercase">Prompt:</span>
+                    <span className="text-sm text-gray-300 flex-1">{generatedImage.prompt}</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-gray-400">
+                    <span>Model: {generatedImage.model}</span>
+                    <span>•</span>
+                    <span>Size: {size}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={handleDownload}
+                    className="py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    {t.downloadBtn}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setGeneratedImage(null);
+                      setPrompt("");
+                    }}
+                    className="py-3 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors"
+                  >
+                    {t.newImageBtn}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="h-96 flex flex-col items-center justify-center text-gray-500 border-2 border-dashed border-gray-600 rounded-lg">
+                <ImageIcon className="w-16 h-16 mb-4" />
+                <p className="text-sm">{t.imageWillAppear}</p>
+              </div>
+            )}
+          </div>
+        </ToolOutput>
+      </div>
+
+      <div className="mt-6 p-4 bg-blue-900/20 border border-blue-800 rounded-lg">
+        <h3 className="text-sm font-semibold text-blue-100 mb-2">
+          💡 {t.tipsTitle}
+        </h3>
+        <ul className="text-xs text-blue-200 space-y-1 list-disc list-inside">
+          <li>Be specific about colors, lighting, and composition</li>
+          <li>Mention artistic style (photorealistic, cartoon, oil painting)</li>
+          <li>Include mood and atmosphere details</li>
+          <li>Use descriptive adjectives (majestic, serene, vibrant)</li>
+        </ul>
+      </div>
+    </ToolLayout>
+  );
+}

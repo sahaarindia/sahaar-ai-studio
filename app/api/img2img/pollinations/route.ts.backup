@@ -1,0 +1,97 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { mainImageUrl, referenceImageUrls = [], prompt, strength = 0.35, style } = body;
+
+    console.log('🎨 Pollinations API called');
+    console.log('📝 Prompt:', prompt);
+    console.log('🖼️ Main Image:', mainImageUrl);
+    console.log('⚡ Strength:', strength);
+
+    // Build URL
+    const url = new URL('https://image.pollinations.ai/prompt');
+    
+    // ✅ SMART Prompt Enhancement for img2img
+    let enhancedPrompt = prompt;
+    
+    // Only add style prefix if NOT a transformation/editing prompt
+    const isTransformationPrompt = /^(remove|delete|add|change|transform|convert|make|turn|modify)/i.test(prompt.trim());
+    
+    if (!isTransformationPrompt && style && style !== 'auto') {
+      const styleMap: Record<string, string> = {
+        realistic: 'professional photo, highly detailed, realistic',
+        artistic: 'artistic painting, expressive brushstrokes',
+        anime: 'anime style, vibrant colors, detailed illustration',
+        cartoon: 'cartoon style, bold colors, playful',
+        sketch: 'pencil sketch, hand-drawn, artistic',
+        watercolor: 'watercolor painting, soft colors, artistic'
+      };
+      const stylePrefix = styleMap[style] || '';
+      enhancedPrompt = stylePrefix ? `${stylePrefix}, ${prompt}` : prompt;
+    } else {
+      // For transformation prompts, keep them clean
+      console.log('🔄 Transformation prompt detected, using clean prompt');
+    }
+
+    console.log('✨ Enhanced prompt:', enhancedPrompt);
+
+    url.searchParams.append('prompt', enhancedPrompt);
+    url.searchParams.append('model', 'turbo');
+    url.searchParams.append('width', '1024');
+    url.searchParams.append('height', '1024');
+    url.searchParams.append('nologo', 'true');
+    
+    // Add main image as reference for img2img
+    url.searchParams.append('image', mainImageUrl);
+    
+    // Add strength for img2img (higher = more change)
+    url.searchParams.append('strength', strength.toString());
+    
+    // Add seed for consistency
+    url.searchParams.append('seed', Date.now().toString());
+
+    console.log('🌐 Fetching from Pollinations...');
+    console.log('🔗 URL:', url.toString().substring(0, 200) + '...');
+
+    // Fetch the image from Pollinations
+    const imageResponse = await fetch(url.toString(), {
+      method: 'GET',
+      headers: process.env.POLLINATIONS_TOKEN 
+        ? { 'Authorization': `Bearer ${process.env.POLLINATIONS_TOKEN}` }
+        : {}
+    });
+
+    if (!imageResponse.ok) {
+      console.error('❌ Pollinations failed:', imageResponse.status);
+      throw new Error(`Pollinations returned ${imageResponse.status}`);
+    }
+
+    const contentType = imageResponse.headers.get('content-type');
+    console.log('📄 Content-Type:', contentType);
+
+    // Convert to base64
+    const imageBuffer = await imageResponse.arrayBuffer();
+    const base64Image = Buffer.from(imageBuffer).toString('base64');
+    
+    // Use proper mime type
+    const mimeType = contentType || 'image/jpeg';
+    const dataUrl = `data:${mimeType};base64,${base64Image}`;
+
+    console.log('✅ Pollinations success!');
+    console.log('📦 Image size:', (base64Image.length / 1024).toFixed(2), 'KB');
+
+    return NextResponse.json({
+      imageUrl: dataUrl,
+      provider: 'pollinations'
+    });
+
+  } catch (e: any) {
+    console.error('❌ Pollinations error:', e);
+    return NextResponse.json(
+      { error: e?.message || 'Pollinations img2img failed' },
+      { status: 500 }
+    );
+  }
+}

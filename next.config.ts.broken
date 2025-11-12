@@ -1,0 +1,20 @@
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  experimental: {
+    turbo: false,
+  },
+};
+```
+
+---
+
+## 🎯 **NANO MEIN EDIT KARO:**
+
+1. Arrow keys se cursor move karo
+2. Line 3 ke baad type karo:
+```
+   experimental: {
+     turbo: false,
+   },
+export default nextConfig;

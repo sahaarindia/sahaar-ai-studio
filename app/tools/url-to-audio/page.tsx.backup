@@ -1,0 +1,298 @@
+"use client";
+import { useState } from "react";
+import { ToolLayout } from "@/components/tool/ToolLayout";
+import { ToolInput } from "@/components/tool/ToolInput";
+import { ToolOutput } from "@/components/tool/ToolOutput";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { Link, FileText, Download, Play, Loader2, Volume2, AlertCircle, CheckCircle, Upload } from "lucide-react";
+import { voices as VOICES } from "@/src/data/voices";
+
+const MULTILINGUAL_MODEL = "eleven_multilingual_v2";
+
+export default function URLToAudioPage() {
+  const { t } = useLanguage();
+  const [url, setUrl] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [selectedVoice, setSelectedVoice] = useState("IY8nsD2RIP5N4FFQLaT3"); // Arvinda (Hindi)
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [extractedText, setExtractedText] = useState<string>("");
+  const [filterCategory, setFilterCategory] = useState<"all" | "hindi" | "english">("all");
+
+  const filteredVoices = filterCategory === "all" 
+    ? VOICES 
+    : VOICES.filter(v => v.category === filterCategory);
+
+  const selectedVoiceData = VOICES.find(v => v.id === selectedVoice);
+
+  const handleGenerate = async () => {
+    if (!url && !file) {
+      setError("Please provide a URL or upload a file");
+      return;
+    }
+
+    setIsGenerating(true);
+    setError(null);
+    setAudioUrl(null);
+    setExtractedText("");
+
+    try {
+      const formData = new FormData();
+      if (url) formData.append("url", url);
+      if (file) formData.append("file", file);
+      formData.append("voiceId", selectedVoice);
+      formData.append("modelId", MULTILINGUAL_MODEL);
+
+      const response = await fetch("/api/url-to-audio", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate audio");
+      }
+
+      // Check if response is JSON (with extracted text) or audio
+      const contentType = response.headers.get("content-type");
+      
+      if (contentType?.includes("application/json")) {
+        const data = await response.json();
+        setExtractedText(data.text);
+        setAudioUrl(data.audioUrl);
+      } else {
+        // Audio response
+        const blob = await response.blob();
+        const audioUrl = URL.createObjectURL(blob);
+        setAudioUrl(audioUrl);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate audio");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      setUrl(""); // Clear URL if file is selected
+    }
+  };
+
+  return (
+    <ToolLayout
+      toolName="URL/Document to Audio"
+      toolDescription="Convert web pages, PDFs, or documents into natural speech"
+      toolIcon={<Link className="h-8 w-8 text-white" />}
+      category="Audio Tools"
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Input Section */}
+        <ToolInput title="Input Source" icon={<FileText className="h-5 w-5 text-blue-400" />}>
+          <div className="space-y-4">
+            {/* URL Input */}
+            <div>
+              <Label className="text-white mb-2 block">Enter URL</Label>
+              <Input
+                type="url"
+                value={url}
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  if (e.target.value) setFile(null); // Clear file if URL is entered
+                }}
+                placeholder="https://example.com/article"
+                disabled={!!file || isGenerating}
+                className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+              />
+            </div>
+
+            {/* OR Divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/20"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-[#130A3B] text-white/50">OR</span>
+              </div>
+            </div>
+
+            {/* File Upload */}
+            <div>
+              <Label className="text-white mb-2 block">Upload Document</Label>
+              <div className="border-2 border-dashed border-white/20 rounded-lg p-6 text-center hover:border-white/40 transition-colors">
+                <Input
+                  type="file"
+                  onChange={handleFileChange}
+                  accept=".pdf,.txt,.doc,.docx"
+                  disabled={!!url || isGenerating}
+                  className="hidden"
+                  id="file-upload"
+                />
+                <label htmlFor="file-upload" className="cursor-pointer">
+                  <Upload className="h-8 w-8 text-white/50 mx-auto mb-2" />
+                  <p className="text-white/70 text-sm">
+                    {file ? file.name : "Click to upload PDF, TXT, or DOCX"}
+                  </p>
+                  <p className="text-white/50 text-xs mt-1">Max size: 10MB</p>
+                </label>
+              </div>
+            </div>
+
+            {/* Voice Selection */}
+            <div>
+              <Label className="text-white mb-2 block flex items-center gap-2">
+                <Volume2 className="h-4 w-4" />
+                Select Voice ({filteredVoices.length} voices)
+              </Label>
+              
+              {/* Category Filter */}
+              <div className="flex gap-2 mb-3">
+                <Button
+                  variant={filterCategory === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterCategory("all")}
+                  className={`flex-1 ${filterCategory === "all" ? "bg-blue-600 text-white" : "bg-white/10 text-white border-white/30 hover:bg-white/20"}`}
+                >
+                  All Voices
+                </Button>
+                <Button
+                  variant={filterCategory === "hindi" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterCategory("hindi")}
+                  className={`flex-1 ${filterCategory === "all" ? "bg-blue-600 text-white" : "bg-white/10 text-white border-white/30 hover:bg-white/20"}`}
+                >
+                  Hindi
+                </Button>
+                <Button
+                  variant={filterCategory === "english" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterCategory("english")}
+                  className={`flex-1 ${filterCategory === "all" ? "bg-blue-600 text-white" : "bg-white/10 text-white border-white/30 hover:bg-white/20"}`}
+                >
+                  English
+                </Button>
+              </div>
+
+              <select
+                value={selectedVoice}
+                onChange={(e) => setSelectedVoice(e.target.value)}
+                className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white" style={{ color: "white" }}
+                disabled={isGenerating}
+              >
+                {filteredVoices.map((voice) => (
+                  <option key={voice.id} value={voice.id} className="bg-gray-900 text-white">
+                    {voice.name} ({voice.gender}, {voice.language})
+                  </option>
+                ))}
+              </select>
+              
+              {selectedVoiceData && (
+                <p className="text-white/60 text-sm mt-2">
+                  {selectedVoiceData.description}
+                </p>
+              )}
+            </div>
+
+            {/* Generate Button */}
+            <Button
+              onClick={handleGenerate}
+              disabled={isGenerating || (!url && !file)}
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Converting...
+                </>
+              ) : (
+                <>
+                  <Volume2 className="h-5 w-5 mr-2" />
+                  Generate Audio
+                </>
+              )}
+            </Button>
+          </div>
+        </ToolInput>
+
+        {/* Output Section */}
+        <ToolOutput title="Generated Audio" icon={<Volume2 className="h-5 w-5 text-green-400" />}>
+          <div className="space-y-4">
+            {/* Error Message */}
+            {error && (
+              <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-red-200 font-medium">Error</p>
+                  <p className="text-red-300 text-sm">{error}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Extracted Text Preview */}
+            {extractedText && (
+              <div className="bg-white/5 border border-white/10 rounded-lg p-4">
+                <Label className="text-white mb-2 block">Extracted Text Preview:</Label>
+                <div className="bg-black/20 rounded p-3 max-h-40 overflow-y-auto">
+                  <p className="text-white/70 text-sm">{extractedText.substring(0, 500)}...</p>
+                </div>
+              </div>
+            )}
+
+            {/* Audio Player */}
+            {audioUrl && (
+              <div className="bg-gradient-to-br from-green-500/20 to-blue-500/20 border border-green-500/30 rounded-lg p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <CheckCircle className="h-5 w-5 text-green-400" />
+                  <span className="text-green-300 font-medium">Audio Generated Successfully!</span>
+                </div>
+
+                <audio
+                  controls
+                  src={audioUrl}
+                  className="w-full mb-4"
+                  style={{ filter: 'invert(0.9) hue-rotate(180deg)' }}
+                />
+
+                <Button
+                  asChild
+                  className="w-full bg-green-600 hover:bg-green-700"
+                >
+                  <a href={audioUrl} download="url-to-audio.mp3">
+                    <Download className="h-5 w-5 mr-2" />
+                    Download Audio
+                  </a>
+                </Button>
+              </div>
+            )}
+
+            {/* Placeholder */}
+            {!audioUrl && !error && !isGenerating && (
+              <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                <Volume2 className="h-16 w-16 text-white/30 mb-4" />
+                <p className="text-white/50">
+                  Enter a URL or upload a document to generate audio
+                </p>
+              </div>
+            )}
+
+            {/* Loading State */}
+            {isGenerating && (
+              <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                <Loader2 className="h-16 w-16 text-blue-400 animate-spin mb-4" />
+                <p className="text-white/70">Extracting text and generating audio...</p>
+                <p className="text-white/50 text-sm mt-2">This may take a few moments</p>
+              </div>
+            )}
+          </div>
+        </ToolOutput>
+      </div>
+    </ToolLayout>
+  );
+}
