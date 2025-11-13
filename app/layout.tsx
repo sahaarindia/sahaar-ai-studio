@@ -1,23 +1,12 @@
 import type { Metadata } from "next";
-import { Inter } from 'next/font/google'
-
-const inter = Inter({ subsets: ['latin'] })
+import { Inter } from "next/font/google";
 import "./globals.css";
-import { Providers } from "@/components/Providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Sahaar AI Studio",
-  description: "AI-powered tools for everyone",
+  description: "Create faster. Help more.",
 };
 
 export default function RootLayout({
@@ -27,10 +16,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={inter.className} ${geistMono.variable} antialiased`}
-      >
-        <Providers>{children}</Providers>
+      <body className={`${inter.className} antialiased`}>
+        {children}
       </body>
     </html>
   );
