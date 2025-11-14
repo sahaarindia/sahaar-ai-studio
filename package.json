@@ -44,3 +44,7 @@
     "typescript": "^5"
   }
 }
+"devDependencies": {
+  "@types/pdf-parse": "^1.1.1",
+  // ... existing devDependencies
+}
