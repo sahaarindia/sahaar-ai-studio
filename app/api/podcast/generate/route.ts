@@ -194,7 +194,8 @@ export async function POST(req: NextRequest) {
     console.log(`✅ PODCAST COMPLETE: ${finalAudio.length} bytes`);
     console.log("=".repeat(60));
 
-    return new Response(finalAudio.buffer, {
+const arrayBuffer = finalAudio.buffer.slice(finalAudio.byteOffset, finalAudio.byteOffset + finalAudio.byteLength);
+return new Response(arrayBuffer, {
       headers: {
         "Content-Type": "audio/mpeg",
         "Content-Length": finalAudio.length.toString(),
