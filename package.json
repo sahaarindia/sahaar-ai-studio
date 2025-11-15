@@ -33,7 +33,7 @@
     "youtube-transcript": "^1.2.1"
   },
   "devDependencies": {
-    "@types/node": "^28",
+    "@types/node": "^22.0.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/pdf-parse": "^1.1.1",
